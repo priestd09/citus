@@ -109,7 +109,7 @@ static bool ExtractSetOperationStatmentWalker(Node *node, List **setOperationLis
 static DeferredErrorMessage * DeferErrorIfUnsupportedTableCombination(Query *queryTree);
 static bool WindowPartitionOnDistributionColumn(Query *query);
 static bool AllTargetExpressionsAreColumnReferences(List *targetEntryList);
-static bool RangeTableListContainsOnlyReferenceTables(List *rangeTableList);
+static bool RangeTableListContainsOnlyRecurringTuples(List *rangeTableList);
 static FieldSelect * CompositeFieldRecursive(Expr *expression, Query *query);
 static bool FullCompositeFieldList(List *compositeFieldList);
 static MultiNode * MultiNodeTree(Query *queryTree);
@@ -1510,12 +1510,12 @@ TargetListOnPartitionColumn(Query *query, List *targetEntryList)
 
 	/*
 	 * We could still behave as if the target list is on partition column if
-	 * all range table entries are reference tables and all target expressions
-	 * are column references to the given query level.
+	 * all range table entries are reference tables or intermediate results,
+	 * and all target expressions are column references to the given query level.
 	 */
 	if (!targetListOnPartitionColumn)
 	{
-		if (RangeTableListContainsOnlyReferenceTables(query->rtable) &&
+		if (RangeTableListContainsOnlyRecurringTuples(query->rtable) &&
 			AllTargetExpressionsAreColumnReferences(targetEntryList))
 		{
 			targetListOnPartitionColumn = true;
@@ -1580,16 +1580,17 @@ AllTargetExpressionsAreColumnReferences(List *targetEntryList)
 
 
 /*
- * RangeTableListContainsOnlyReferenceTables returns true if all range table
- * entries are reference tables.
+ * RangeTableListContainsOnlyRecurringTuples returns true if all range table
+ * entries are either reference tables or intermediate result function.
  *
  * The function returns false for range table entries that are not relations.
  *
  * Note that the function doesn't recurse into subqueries, returns false when
- * a subquery is found.
+ * a subquery is found. Also, the function ignores RECURRING_TUPLES_EMPTY_JOIN_TREE
+ * since they are not likely to have GROUP BY entries.
  */
 static bool
-RangeTableListContainsOnlyReferenceTables(List *rangeTableList)
+RangeTableListContainsOnlyRecurringTuples(List *rangeTableList)
 {
 	ListCell *rangeTableCell = NULL;
 	foreach(rangeTableCell, rangeTableList)
@@ -1606,6 +1607,28 @@ RangeTableListContainsOnlyReferenceTables(List *rangeTableList)
 			}
 
 			if (PartitionMethod(relationId) != DISTRIBUTE_BY_NONE)
+			{
+				return false;
+			}
+		}
+		else if (rangeTableEntry->rtekind == RTE_FUNCTION)
+		{
+			List *functionList = rangeTableEntry->functions;
+
+			/*
+			 * We should allow both intermediate results function
+			 * and any other immutable functions.
+			 */
+			if ((list_length(functionList) == 1 &&
+				 ContainsReadIntermediateResultFunction(linitial(functionList))))
+			{
+				continue;
+			}
+			else if (!contain_mutable_functions((Node *) functionList))
+			{
+				continue;
+			}
+			else
 			{
 				return false;
 			}
