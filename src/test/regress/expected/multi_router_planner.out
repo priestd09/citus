@@ -570,7 +570,7 @@ DETAIL:  Creating dependency on merge taskId 14
 DEBUG:  pruning merge fetch taskId 11
 DETAIL:  Creating dependency on merge taskId 14
 ERROR:  cannot use real time executor with repartition jobs
-HINT:  Set citus.task_executor_type to "task-tracker".
+HINT:  Set citus.task_executor_type to "task-tracker" or set citus.enable_repartition_joins to on.
 SELECT articles_hash.id,test.word_count
 FROM articles_hash, (SELECT id, word_count FROM articles_hash) AS test 
 WHERE test.id = articles_hash.id and articles_hash.author_id = 1
@@ -604,7 +604,7 @@ DETAIL:  Creating dependency on merge taskId 9
 DEBUG:  pruning merge fetch taskId 11
 DETAIL:  Creating dependency on merge taskId 14
 ERROR:  cannot use real time executor with repartition jobs
-HINT:  Set citus.task_executor_type to "task-tracker".
+HINT:  Set citus.task_executor_type to "task-tracker" or set citus.enable_repartition_joins to on.
 -- subqueries are not supported in SELECT clause
 SELECT a.title AS name, (SELECT a2.id FROM articles_single_shard_hash a2 WHERE a.id = a2.id  LIMIT 1)
 						 AS special_price FROM articles_hash a;
@@ -911,7 +911,22 @@ SELECT *
 	FROM articles_hash a, articles_hash b
 	WHERE a.id = b.id  AND a.author_id = 1;
 ERROR:  cannot use real time executor with repartition jobs
-HINT:  Set citus.task_executor_type to "task-tracker".
+HINT:  Set citus.task_executor_type to "task-tracker" or set citus.enable_repartition_joins to on.
+-- by setting enable_repartition_joins we can make this query run
+SET citus.enable_repartition_joins TO ON;
+SELECT *
+	FROM articles_hash a, articles_hash b
+	WHERE a.id = b.id  AND a.author_id = 1;
+ id | author_id |    title     | word_count | id | author_id |    title     | word_count 
+----+-----------+--------------+------------+----+-----------+--------------+------------
+ 41 |         1 | aznavour     |      11814 | 41 |         1 | aznavour     |      11814
+ 11 |         1 | alamo        |       1347 | 11 |         1 | alamo        |       1347
+ 31 |         1 | athwartships |       7271 | 31 |         1 | athwartships |       7271
+  1 |         1 | arsenous     |       9572 |  1 |         1 | arsenous     |       9572
+ 21 |         1 | arcading     |       5890 | 21 |         1 | arcading     |       5890
+(5 rows)
+
+SET citus.enable_repartition_joins TO OFF;
 -- queries which hit more than 1 shards are not router plannable or executable
 -- handled by real-time executor
 SELECT *
@@ -1675,7 +1690,7 @@ DETAIL:  Creating dependency on merge taskId 9
 DEBUG:  pruning merge fetch taskId 22
 DETAIL:  Creating dependency on merge taskId 9
 ERROR:  cannot use real time executor with repartition jobs
-HINT:  Set citus.task_executor_type to "task-tracker".
+HINT:  Set citus.task_executor_type to "task-tracker" or set citus.enable_repartition_joins to on.
 -- join between a range partitioned table and reference table is router plannable
 SELECT * FROM articles_range ar join authors_reference au on (ar.author_id = au.id)
 	WHERE ar.author_id = 1;

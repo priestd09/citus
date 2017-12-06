@@ -454,7 +454,7 @@ DETAIL:  Creating dependency on merge taskId 14
 DEBUG:  pruning merge fetch taskId 11
 DETAIL:  Creating dependency on merge taskId 14
 ERROR:  cannot use real time executor with repartition jobs
-HINT:  Set citus.task_executor_type to "task-tracker".
+HINT:  Set citus.task_executor_type to "task-tracker" or set citus.enable_repartition_joins to on.
 SELECT articles_hash_mx.id,test.word_count
 FROM articles_hash_mx, (SELECT id, word_count FROM articles_hash_mx) AS test 
 WHERE test.id = articles_hash_mx.id and articles_hash_mx.author_id = 1
@@ -488,7 +488,7 @@ DETAIL:  Creating dependency on merge taskId 9
 DEBUG:  pruning merge fetch taskId 11
 DETAIL:  Creating dependency on merge taskId 14
 ERROR:  cannot use real time executor with repartition jobs
-HINT:  Set citus.task_executor_type to "task-tracker".
+HINT:  Set citus.task_executor_type to "task-tracker" or set citus.enable_repartition_joins to on.
 -- subqueries are not supported in SELECT clause
 SELECT a.title AS name, (SELECT a2.id FROM articles_single_shard_hash_mx a2 WHERE a.id = a2.id  LIMIT 1)
 						 AS special_price FROM articles_hash_mx a;
@@ -794,7 +794,7 @@ SELECT *
 	FROM articles_hash_mx a, articles_hash_mx b
 	WHERE a.id = b.id  AND a.author_id = 1;
 ERROR:  cannot use real time executor with repartition jobs
-HINT:  Set citus.task_executor_type to "task-tracker".
+HINT:  Set citus.task_executor_type to "task-tracker" or set citus.enable_repartition_joins to on.
 -- queries which hit more than 1 shards are not router plannable or executable
 -- handled by real-time executor
 SELECT *
