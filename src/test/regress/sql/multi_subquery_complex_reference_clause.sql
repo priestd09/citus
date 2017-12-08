@@ -1111,6 +1111,23 @@ GROUP BY res.val_square) squares
 ORDER BY 1
 LIMIT 5;
 
+
+-- single appereance of read_intermediate_result but inside a subquery
+SELECT 
+  DISTINCT user_id 
+FROM 
+  users_table 
+JOIN (
+  SELECT *,random() FROM (SELECT 
+    max(res.val) as mx 
+  FROM 
+      (SELECT val, val_square FROM read_intermediate_result('squares', 'binary') AS res (val int, val_square int)) res 
+  GROUP BY res.val_square) foo)
+squares
+ ON (mx = user_id)
+ORDER BY 1
+LIMIT 5;
+
 -- multiple read_intermediate_results in the same subquery is OK
 SELECT 
   DISTINCT user_id 

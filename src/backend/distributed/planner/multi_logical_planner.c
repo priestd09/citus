@@ -109,7 +109,7 @@ static bool ExtractSetOperationStatmentWalker(Node *node, List **setOperationLis
 static DeferredErrorMessage * DeferErrorIfUnsupportedTableCombination(Query *queryTree);
 static bool WindowPartitionOnDistributionColumn(Query *query);
 static bool AllTargetExpressionsAreColumnReferences(List *targetEntryList);
-static bool RangeTableListContainsOnlyRecurringTuples(List *rangeTableList);
+static bool HasNonRecurringTuples(Node *node);
 static FieldSelect * CompositeFieldRecursive(Expr *expression, Query *query);
 static bool FullCompositeFieldList(List *compositeFieldList);
 static MultiNode * MultiNodeTree(Query *queryTree);
@@ -1515,7 +1515,7 @@ TargetListOnPartitionColumn(Query *query, List *targetEntryList)
 	 */
 	if (!targetListOnPartitionColumn)
 	{
-		if (RangeTableListContainsOnlyRecurringTuples(query->rtable) &&
+		if (!HasNonRecurringTuples((Node *) query->rtable) &&
 			AllTargetExpressionsAreColumnReferences(targetEntryList))
 		{
 			targetListOnPartitionColumn = true;
@@ -1580,66 +1580,33 @@ AllTargetExpressionsAreColumnReferences(List *targetEntryList)
 
 
 /*
- * RangeTableListContainsOnlyRecurringTuples returns true if all range table
- * entries are either reference tables or intermediate result function.
- *
- * The function returns false for range table entries that are not relations.
- *
- * Note that the function doesn't recurse into subqueries, returns false when
- * a subquery is found. Also, the function ignores RECURRING_TUPLES_EMPTY_JOIN_TREE
- * since they are not likely to have GROUP BY entries.
+ * HasOnlyRecurringTuples returns if at least one of the relations in the given node
+ * is a distributed relation.
  */
 static bool
-RangeTableListContainsOnlyRecurringTuples(List *rangeTableList)
+HasNonRecurringTuples(Node *node)
 {
+	List *rangeTableList = NULL;
 	ListCell *rangeTableCell = NULL;
+
+	/* extract range table entries for simple relations only */
+	ExtractRangeTableRelationWalker((Node *) node, &rangeTableList);
+
 	foreach(rangeTableCell, rangeTableList)
 	{
 		RangeTblEntry *rangeTableEntry = (RangeTblEntry *) lfirst(rangeTableCell);
+		Oid relationId = rangeTableEntry->relid;
 
-		if (rangeTableEntry->rtekind == RTE_RELATION)
+		Assert(rangeTableEntry->rtekind == RTE_RELATION);
+
+		if (IsDistributedTable(relationId) &&
+			PartitionMethod(relationId) != DISTRIBUTE_BY_NONE)
 		{
-			Oid relationId = rangeTableEntry->relid;
-
-			if (!IsDistributedTable(relationId))
-			{
-				return false;
-			}
-
-			if (PartitionMethod(relationId) != DISTRIBUTE_BY_NONE)
-			{
-				return false;
-			}
-		}
-		else if (rangeTableEntry->rtekind == RTE_FUNCTION)
-		{
-			List *functionList = rangeTableEntry->functions;
-
-			/*
-			 * We should allow both intermediate results function
-			 * and any other immutable functions.
-			 */
-			if ((list_length(functionList) == 1 &&
-				 ContainsReadIntermediateResultFunction(linitial(functionList))))
-			{
-				continue;
-			}
-			else if (!contain_mutable_functions((Node *) functionList))
-			{
-				continue;
-			}
-			else
-			{
-				return false;
-			}
-		}
-		else
-		{
-			return false;
+			return true;
 		}
 	}
 
-	return true;
+	return false;
 }
 
 
